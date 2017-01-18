@@ -9,8 +9,12 @@ import org.apache.spark.SparkConf;
 import org.apache.spark.api.java.JavaRDD;
 import org.apache.spark.api.java.JavaSparkContext;
 import org.apache.spark.sql.DataFrame;
-import org.apache.spark.sql.Row;
 import org.apache.spark.sql.SQLContext;
+
+import org.apache.hadoop.conf.Configuration;
+import org.apache.hadoop.hbase.HBaseConfiguration;
+import org.apache.hadoop.hbase.TableName;
+import org.apache.hadoop.hbase.spark.JavaHBaseContext;
 
 
 public class Main {
@@ -30,21 +34,24 @@ public class Main {
         sparkConf.setAppName("spark-hbase-demo");
         sparkConf.setMaster("local[*]"); // comment this out when running via `spark-submit` on a cluster
 
-        JavaSparkContext sc = new JavaSparkContext(sparkConf);
+        JavaSparkContext jsc = new JavaSparkContext(sparkConf);
 
         Map<String, String> options = new HashMap<String, String>();
-        options.put("url","jdbc:mysql://deepthought.woolford.io:3306/davita_demo?user=davita&password=davita");
+        options.put("url", "jdbc:mysql://deepthought.woolford.io:3306/davita_demo?user=davita&password=davita");
         options.put("dbtable", "transactions");
-        SQLContext sqlContext = new org.apache.spark.sql.SQLContext(sc);
-        DataFrame jdbcDF = sqlContext.jdbc(options.get("url"),options.get("dbtable"));
+        SQLContext sqlContext = new org.apache.spark.sql.SQLContext(jsc);
+        DataFrame jdbcDF = sqlContext.jdbc(options.get("url"), options.get("dbtable"));
 
-        JavaRDD<Row> jdbcRDD = jdbcDF.javaRDD();
+        JavaRDD jdbcRDD = jdbcDF.javaRDD();
 
-        logger.info(String.valueOf(jdbcDF.count()));
+        Configuration conf = HBaseConfiguration.create();
 
-        for (String col : jdbcDF.columns()){
-            logger.info(col);
-        }
+        JavaHBaseContext hbaseContext = new JavaHBaseContext(jsc, conf);
+
+        hbaseContext.bulkPut(jdbcRDD,
+                TableName.valueOf("test"),
+                new PutFunction()
+        );
 
     }
 
